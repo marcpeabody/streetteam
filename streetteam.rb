@@ -5,9 +5,12 @@ require 'dalli'
 
 class Streetteam < Sinatra::Base
   get '/' do
-    """Add your runkeeper id to the end of the URL. Example: http://streetteam.heroku.com/bigbadrunninglady
+    """
+    Challenge your RunKeeper Street Team to see who burns the most calories this month (#{formatted_month}).
     <br/><br/>
-    (it will take a while the first time you run this with your id)
+    To keep track, just add your runkeeper id to the end of this URL. Example: <a href='marcpeabody'>http://streetteam.heroku.com/marcpeabody</a>
+    <br/><br/>
+    (be patient - it will take a while the *first* time you run this with your id)
     """
   end
 
@@ -55,16 +58,14 @@ def report(runner_id)
   end
 
   teammates.each do |tm|
-    puts "#{tm[:name]}... #{tm[:identifier]}"
+    # puts "#{tm[:name]}... #{tm[:identifier]}"
     ac  = tm[:activity_count]
     user = tm[:identifier]
     lazy_person = activity_count_unchanged?(user, key_month, ac)
     cached_cal  = month_calories(user, key_month)
     if lazy_person && cached_cal
-      puts "lazy and cached_cal"
       tm[:month_calories] = cached_cal
     else
-      puts "not lazy"
       n = noko "/user/#{tm[:identifier]}/activity"
       this_month_accordion_element = n.css('.accordion').find{|ae| formatted_month(ae.css('.mainText').inner_html) == this_month}
       if this_month_accordion_element
@@ -75,7 +76,6 @@ def report(runner_id)
                  :miles    => a.css('.distance').inner_html}
           @@calories ||= {}
           act[:calories] = calories_for_activity(a[:link])
-    puts "cals #{act[:calories]}"
           act
         end
         tm[:month_calories] = activities.inject(0){|tot,a| tot + a[:calories].gsub(/\,|\s/,'').to_i }
@@ -87,7 +87,8 @@ def report(runner_id)
   rep = ["#{runner_id}'s team has #{teammates.size} members.",
          "Here's how they rank by calories burned this month."]
   teammates.sort{|x,y| y[:month_calories] <=> x[:month_calories] }.each_with_index do |tm,i|
-    rep << "#{i+1}) #{tm[:name]} #{tm[:month_calories]}"
+    name_url = "http://runkeeper.com/user/#{tm[:identifier]}"
+    rep << "#{i+1}) <a href='#{name_url}'>#{tm[:name]}</a> #{tm[:month_calories]}"
   end
   rep.join('<br/>')
 end
