@@ -1,10 +1,14 @@
 require 'sinatra/base'
 require 'open-uri'
 require 'nokogiri'
+require 'dalli'
 
 class Streetteam < Sinatra::Base
   get '/' do
-    "Add your runkeeper id to the end of the URL. Example: http://streetteam.heroku.com/bigbadrunninglady"
+    """Add your runkeeper id to the end of the URL. Example: http://streetteam.heroku.com/bigbadrunninglady
+    <br/><br/>
+    (it will take a while the first time you run this with your id)
+    """
   end
 
   get '/:runner_id' do
@@ -22,6 +26,10 @@ def formatted_month(time_string=nil)
   end
   time.strftime("%b %Y")
   # (time_string.nil? ? Time.new : Time.parse(time_string)).strftime("%b %Y") # Jul 2011
+end
+
+def key_month
+  formatted_month.delete(' ')
 end
 
 def noko(url)
@@ -48,19 +56,31 @@ def report(runner_id)
 
   teammates.each do |tm|
     puts "#{tm[:name]}... #{tm[:identifier]}"
-    n = noko "/user/#{tm[:identifier]}/activity"
-    this_month_accordion_element = n.css('.accordion').find{|ae| formatted_month(ae.css('.mainText').inner_html) == this_month}
-    if this_month_accordion_element
-      this_month_container_element = this_month_accordion_element.next_element
-      activity_elements = this_month_container_element.css('.activityMonth')
-      activities = activity_elements.collect do |a|
-        act = {:act_type => a.css('.mainText').inner_html,
-               :miles    => a.css('.distance').inner_html}
-        an = noko a[:link]
-        act[:calories] = an.css('#statsCalories .mainText').inner_html
-        act
+    ac  = tm[:activity_count]
+    user = tm[:identifier]
+    lazy_person = activity_count_unchanged?(user, key_month, ac)
+    cached_cal  = month_calories(user, key_month)
+    if lazy_person && cached_cal
+      puts "lazy and cached_cal"
+      tm[:month_calories] = cached_cal
+    else
+      puts "not lazy"
+      n = noko "/user/#{tm[:identifier]}/activity"
+      this_month_accordion_element = n.css('.accordion').find{|ae| formatted_month(ae.css('.mainText').inner_html) == this_month}
+      if this_month_accordion_element
+        this_month_container_element = this_month_accordion_element.next_element
+        activity_elements = this_month_container_element.css('.activityMonth')
+        activities = activity_elements.collect do |a|
+          act = {:act_type => a.css('.mainText').inner_html,
+                 :miles    => a.css('.distance').inner_html}
+          @@calories ||= {}
+          act[:calories] = calories_for_activity(a[:link])
+    puts "cals #{act[:calories]}"
+          act
+        end
+        tm[:month_calories] = activities.inject(0){|tot,a| tot + a[:calories].gsub(/\,|\s/,'').to_i }
       end
-      tm[:month_calories] = activities.inject(0){|tot,a| tot + a[:calories].gsub(/\,|\s/,'').to_i }
+      cache_month_calories(user, key_month, tm[:month_calories])
     end
   end
 
@@ -70,4 +90,43 @@ def report(runner_id)
     rep << "#{i+1}) #{tm[:name]} #{tm[:month_calories]}"
   end
   rep.join('<br/>')
+end
+
+def calories_for_activity(link)
+  return cal if cal = m.get(link)
+  cal = get_calories(link)
+  eom = secs_to_end_of_month
+  m.set(link, cal, eom)
+  cal
+end
+
+def activity_count_unchanged?(user, month_year, activity_count)
+  key = "#{user}/#{month_year}/activity_count"
+  cached_ac = m.get(key)
+  return true if cached_ac == activity_count
+  m.set(key, activity_count, secs_to_end_of_month)
+  return false
+end
+
+def month_calories(user, month_year)
+  m.get("#{user}/#{month_year}/calories")
+end
+
+def cache_month_calories(user, month_year, calories)
+  m.set("#{user}/#{month_year}/calories", calories)
+end
+
+def get_calories(link)
+  noko(link).css('#statsCalories .mainText').inner_html
+end
+
+def secs_to_end_of_month(now = DateTime::now())
+  end_of_month = DateTime.new(now.year, now.month + 1, 1)
+  dif = end_of_month - now
+  hours, mins, secs, ignore_fractions = Date.send(:day_fraction_to_time, dif)
+  hours * 60 * 60 + mins * 60 + secs
+end
+
+def m
+  @m ||= Dalli::Client.new(ENV['MEMCACHE_SERVERS'], :username => ENV['MEMCACHE_USERNAME'], :password => ENV['MEMCACHE_PASSWORD'])
 end
