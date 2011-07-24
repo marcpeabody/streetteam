@@ -11,6 +11,10 @@ class Streetteam < Sinatra::Base
     To keep track, just add your runkeeper id to the end of this URL. Example: <a href='marcpeabody'>http://streetteam.heroku.com/marcpeabody</a>
     <br/><br/>
     (be patient - it will take a while the *first* time you run this with your id)
+    <br/><br/>
+    <br/><br/>
+    <br/><br/>
+    <a href='https://github.com/marcpeabody/streetteam' target='github'>source code</a>
     """
   end
 
@@ -88,7 +92,7 @@ def report(runner_id)
          "Here's how they rank by calories burned this month."]
   teammates.sort{|x,y| y[:month_calories] <=> x[:month_calories] }.each_with_index do |tm,i|
     name_url = "http://runkeeper.com/user/#{tm[:identifier]}"
-    rep << "#{i+1}) <a href='#{name_url}'>#{tm[:name]}</a> #{tm[:month_calories]}"
+    rep << "#{i+1}) <a href='#{name_url}' target='runkeeper'>#{tm[:name]}</a> #{tm[:month_calories]}"
   end
   rep.join('<br/>')
 end
