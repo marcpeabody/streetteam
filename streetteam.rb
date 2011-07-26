@@ -62,11 +62,11 @@ def report(runner_id)
   end
 
   teammates.each do |tm|
-    # puts "#{tm[:name]}... #{tm[:identifier]}"
     ac  = tm[:activity_count]
     user = tm[:identifier]
     lazy_person = activity_count_unchanged?(user, key_month, ac)
     cached_cal  = month_calories(user, key_month)
+    # puts "#{tm[:name]}... #{user} activity count: #{ac} unchanged? #{lazy_person}"
     if lazy_person && cached_cal
       tm[:month_calories] = cached_cal
     else
@@ -85,6 +85,7 @@ def report(runner_id)
         tm[:month_calories] = activities.inject(0){|tot,a| tot + a[:calories].gsub(/\,|\s/,'').to_i }
       end
       cache_month_calories(user, key_month, tm[:month_calories])
+      cache_activity_count(user, key_month, ac)
     end
   end
 
@@ -98,7 +99,8 @@ def report(runner_id)
 end
 
 def calories_for_activity(link)
-  return cal if cal = m.get(link)
+  cal = m.get(link)
+  return cal if cal
   cal = get_calories(link)
   eom = secs_to_end_of_month
   m.set(link, cal, eom)
@@ -109,8 +111,12 @@ def activity_count_unchanged?(user, month_year, activity_count)
   key = "#{user}/#{month_year}/activity_count"
   cached_ac = m.get(key)
   return true if cached_ac == activity_count
-  m.set(key, activity_count, secs_to_end_of_month)
   return false
+end
+
+def cache_activity_count(user, month_year, activity_count)
+  key = "#{user}/#{month_year}/activity_count"
+  m.set(key, activity_count, secs_to_end_of_month)
 end
 
 def month_calories(user, month_year)
