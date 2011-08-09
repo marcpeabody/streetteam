@@ -19,7 +19,8 @@ class Streetteam < Sinatra::Base
   end
 
   get '/:runner_id' do
-    report(params[:runner_id])
+    resetters = (params[:reset] || '').split(',')
+    report(params[:runner_id], resetters)
   end
 end
 
@@ -43,7 +44,7 @@ def noko(url)
   Nokogiri::HTML(open("http://runkeeper.com#{url}"))
 end
 
-def report(runner_id)
+def report(runner_id, resetters)
   this_month = formatted_month
   begin
     n = noko "/user/#{runner_id}/streetTeam"
@@ -64,10 +65,11 @@ def report(runner_id)
   teammates.each do |tm|
     ac  = tm[:activity_count]
     user = tm[:identifier]
+    reset_user = resetters.include? user
     lazy_person = activity_count_unchanged?(user, key_month, ac)
     cached_cal  = month_calories(user, key_month)
     # puts "#{tm[:name]}... #{user} activity count: #{ac} unchanged? #{lazy_person}"
-    if lazy_person && cached_cal
+    if !reset_user && lazy_person && cached_cal
       tm[:month_calories] = cached_cal
     else
       n = noko "/user/#{tm[:identifier]}/activity"
@@ -79,7 +81,7 @@ def report(runner_id)
           act = {:act_type => a.css('.mainText').inner_html,
                  :miles    => a.css('.distance').inner_html}
           @@calories ||= {}
-          act[:calories] = calories_for_activity(a[:link])
+          act[:calories] = calories_for_activity(a[:link], reset_user)
           act
         end
         tm[:month_calories] = activities.inject(0){|tot,a| tot + a[:calories].gsub(/\,|\s/,'').to_i }
@@ -98,9 +100,11 @@ def report(runner_id)
   rep.join('<br/>')
 end
 
-def calories_for_activity(link)
-  cal = m.get(link)
-  return cal if cal
+def calories_for_activity(link, ignore_cache)
+  unless ignore_cache
+    cal = m.get(link)
+    return cal if cal
+  end
   cal = get_calories(link)
   eom = secs_to_end_of_month
   m.set(link, cal, eom)
