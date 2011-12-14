@@ -136,7 +136,7 @@ def get_calories(link)
 end
 
 def secs_to_end_of_month(now = DateTime::now())
-  end_of_month = DateTime.new(now.year, now.month + 1, 1)
+  end_of_month = DateTime.new(now.year, now.month, 1)
   dif = end_of_month - now
   hours, mins, secs, ignore_fractions = Date.send(:day_fraction_to_time, dif)
   hours * 60 * 60 + mins * 60 + secs
